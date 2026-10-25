@@ -30,3 +30,6 @@ htmlcov/
 # Notebook checkpoints
 .ipynb_checkpoints/
 
+
+# Local helper scripts (kept out of version control)
+scripts/
