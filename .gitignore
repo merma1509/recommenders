@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Environment and secrets
+.env
+env.local
+
+# Generated data and artifacts
+!data/
+!outputs/
+!reports/
+tmp/
+
+# Testing / tooling artifacts
+.coverage
+htmlcov/
+*.log
+*.txt
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
