@@ -1,4 +1,4 @@
-"""Task 1: Dataset collection for points of interest (POI).
+"""Task 1: Dataset collection for points of interest (POI)
 
 Uses the OpenStreetMap Overpass API to fetch real places (cafes, restaurants,
 museums, parks, etc.) for a given bounding box. Works fully offline via a
@@ -18,34 +18,69 @@ import requests
 from src.config import Settings, ensure_dirs
 
 # Nominatim geocoder: supports category search within a viewbox and is widely
-# reachable. It is a thin layer over the OSM database.
+# reachable. It is a thin layer over the OSM database
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 # Shortcut to the OSM editors' API used as a fallback when Overpass is blocked.
 # Public OSM API allows small bbox downloads via /api/0.6/map?bbox=...
 OSM_API_URL = "https://api.openstreetmap.org/api/0.6/map"
 
-# Default Overpass endpoints; the first is preferred, the rest are fallbacks.
+# Default Overpass endpoints; the first is preferred, the rest are fallbacks
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
 # User-Agent: Overpass/OSM/Nominatim require a meaningful identifier to avoid
-# rate-limiting.
+# rate-limiting
 USER_AGENT = "poi-recommendations-pipeline/0.1 (educational dataset collection)"
-# Human-friendly delay between requests to stay polite to the API.
+# Human-friendly delay between requests to stay polite to the API
 REQUEST_DELAY_SECONDS = 2.0
-# Number of attempts per endpoint before trying the next one.
+
+# Number of attempts per endpoint before trying the next one
 MAX_RETRIES = 2
-# HTTP timeout in seconds for a single request.
+
+# HTTP timeout in seconds for a single request
 HTTP_TIMEOUT_SECONDS = 120
-# Grid step (degrees) used when scanning via the OSM API fallback.
+
+# Grid step (degrees) used when scanning via the OSM API fallback
 OSM_API_GRID_STEP = 0.002
-# Nominatim recommends a small delay between requests to respect its usage policy.
+
+# Nominatim recommends a small delay between requests to respect its usage policy
 NOMINATIM_DELAY_SECONDS = 1.1
 
-# Wikipedia REST API used to enrich short descriptions for found places.
+# Wikipedia REST API used to enrich short descriptions for found places
 WIKIPEDIA_API_URL = "https://ru.wikipedia.org/w/api.php"
+
+# Wikivoyage (open travel guide) is used as a free, key-less source of
+# impression-like texts that we store in the `reviews` column
+WIKIVOYAGE_API_URL = "https://ru.wikivoyage.org/w/api.php"
+
+# Hard cap per category regardless of the source (matches Task 1 limits)
+MAX_POIS_PER_CATEGORY_HARD = 12
+
+# Provenance values for the `reviews` column. Being explicit about WHERE a
+# review came from keeps the dataset honest (no fake user ratings):
+#   - "wikivoyage": a real travel-guide text matched to this place (or district).
+#   - "category": a synthesized impression (no free source exposes user reviews
+#     for single cafes/bars/cinemas). Marked clearly as synthetic.
+#   - "": no review available.
+REVIEW_SOURCE_WIKIVOYAGE = "wikivoyage"
+REVIEW_SOURCE_CATEGORY = "category"
+
+# Categories for which public key-less APIs do NOT expose per-place reviews.
+# Wikivoyage has no articles for individual restaurants/bars/cafes/cinemas
+# (and only sporadic coverage of museums/galleries/parks), so we fill `reviews`
+# with a clearly-marked synthetic impression everywhere a real source is absent
+SYNTHETIC_REVIEW_CATEGORIES = {
+    "restaurant",
+    "bar",
+    "cafe",
+    "cinema",
+    "museum",
+    "art_gallery",
+    "park",
+    "hotel",
+}
 
 # Category -> (OSM element type, OSM key, OSM value).
 # Element type may be "node", "way" or "nwr" (nodes + ways + relations).
@@ -63,6 +98,9 @@ OSM_CATEGORY_TAGS: dict[str, tuple[str, str, str]] = {
 }
 
 # Fields we retain from the OSM answer and the exact column names in the dataset.
+# `review_source` documents the provenance of the `reviews` column (see
+# REVIEW_SOURCE_* constants) so synthetic entries are never mistaken for real
+# user reviews.
 RAW_COLUMNS: list[str] = [
     "id",
     "name",
@@ -72,6 +110,7 @@ RAW_COLUMNS: list[str] = [
     "lat",
     "lon",
     "reviews",
+    "review_source",
     "url",
     "source",
 ]
@@ -136,6 +175,7 @@ def _parse_element(
         "lat": lat,
         "lon": lon,
         "reviews": "",  # OSM does not expose reviews; filled later if available.
+        "review_source": "",  # filled in save_records from the enrichment step.
         "url": tags.get("website") or tags.get("url") or "",
         "source": "openstreetmap",
     }
@@ -255,18 +295,60 @@ def _nominatim_to_record(
         "lat": item.get("lat"),
         "lon": item.get("lon"),
         "reviews": "",
+        "review_source": "",  # filled in save_records from the enrichment step.
         "url": "",
         "source": "nominatim",
     }
 
 
 def _city_from_display_name(display_name: str) -> str:
-    """Heuristically extract a city name from a Nominatim display_name."""
-    for part in reversed(display_name.split(",")):
-        part = part.strip()
+    """Extract a city name from a Nominatim display_name (not the country).
+
+    Nominatim display_name is comma-separated, e.g.
+    "Третьяковская галерея, Лаврушинский переулок, ..., район Якиманка,
+    Москва, Центральный федеральный округ, Россия".
+    The city is the part before the country and the federal district; we scan
+    from the right and skip country/region-like suffixes.
+    """
+    parts = [p.strip() for p in display_name.split(",") if p.strip()]
+    # Known suffixes that are broader than a city (country/region).
+    skip = {"россия", "рф", "московская область", "центральный федеральный округ"}
+    for part in reversed(parts):
+        low = part.lower()
+        if low in skip:
+            continue
         if part and not part[0].isdigit():
             return part
     return ""
+
+
+def category_count(records: list[dict[str, Any]], category: str) -> int:
+    """Return how many records of a given category were already collected."""
+    return sum(1 for r in records if r["category"] == category)
+
+
+def _cap_records_per_category(records: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Trim records so each category has at most `limit` entries.
+
+    Preserves the original order (first N per category are kept) and guarantees
+    the Task 1 requirement even when a fallback source returns more items.
+
+    Args:
+        records: list of POI records.
+        limit: maximum number of records per category.
+
+    Returns:
+        A new list with at most `limit` records per category.
+    """
+    counts: dict[str, int] = {}
+    capped: list[dict[str, Any]] = []
+    for record in records:
+        category = record["category"]
+        if counts.get(category, 0) >= limit:
+            continue
+        counts[category] = counts.get(category, 0) + 1
+        capped.append(record)
+    return capped
 
 
 def fetch_from_nominatim(settings: Settings) -> list[dict[str, Any]]:
@@ -297,7 +379,9 @@ def fetch_from_nominatim(settings: Settings) -> list[dict[str, Any]]:
         queries = category_queries.get(category, [value])
         target_count = settings.osm_pois_per_category
         for query in queries:
-            if sum(1 for r in records if r["category"] == category) >= target_count:
+            # Cumulative per-category limit is enforced across all queries for
+            # the same category (not per single query).
+            if category_count(records, category) >= target_count:
                 break
             params = {
                 "q": query,
@@ -432,6 +516,7 @@ def _osm_xml_to_records(
                 "lat": geometry[0] if geometry else None,
                 "lon": geometry[1] if geometry else None,
                 "reviews": "",
+                "review_source": "",  # filled in save_records from the enrichment step.
                 "url": tags.get("website") or tags.get("url") or "",
                 "source": "openstreetmap",
             }
@@ -542,6 +627,55 @@ def load_offline_dataset(settings: Settings) -> pd.DataFrame:
     return pd.read_csv(settings.offline_csv)
 
 
+def _is_rejectable_place_text(text: str) -> bool:
+    """Return True if the Wikipedia/Wikivoyage extract is clearly NOT about a
+    place but about a song, band, album, film or a person.
+
+    Guards against name collisions: a cafe called "Breakfast Club" can match a
+    Wikipedia article about the 1980s band of the same name. Such extracts must
+    not pollute `description` or `reviews`.
+
+    Args:
+        text: the extract text to inspect.
+
+    Returns:
+        True when the text describes a non-place subject.
+    """
+    lowered = " ".join(text.lower().split())
+    non_place_markers = (
+        "— американская группа",
+        "- группа",
+        "— группа",
+        "российская группа",
+        "немецкая группа",
+        "некоторых группа",
+        "песня",
+        "одна из песен",
+        "сингл",
+        "альбом",
+        "студийный альбом",
+        "фильм",
+        "телесериал",
+        "кинофильм",
+        "мультфильм",
+        "писатель",
+        "русский писатель",
+        "поэт",
+        "композитор",
+        "актриса",
+        "актёр",
+        "певица",
+        "певец",
+        "режиссёр",
+        "кинорежиссёр",
+        "расцветки",
+        "хореографический ансамбль",
+        "телесериал об",
+        "государственный академический",
+    )
+    return any(marker in lowered for marker in non_place_markers)
+
+
 def _fetch_wikipedia_descriptions(names: list[str], max_concurrent: int = 20) -> dict[str, str]:
     """Fetch short intro descriptions from Wikipedia for the given names.
 
@@ -580,6 +714,10 @@ def _fetch_wikipedia_descriptions(names: list[str], max_concurrent: int = 20) ->
                 title = page.get("title")
                 extract = (page.get("extract") or "").strip()
                 if title and extract:
+                    # Skip extracts that describe a band/song/film/person rather
+                    # than a place (name-collision guard, e.g. "Breakfast Club").
+                    if _is_rejectable_place_text(extract):
+                        continue
                     # Keep the first matching original name for this article.
                     for name in batch:
                         if name.lower() in title.lower() or title.lower() in name.lower():
@@ -591,11 +729,135 @@ def _fetch_wikipedia_descriptions(names: list[str], max_concurrent: int = 20) ->
     return descriptions
 
 
+def _is_rejectable_wikivoyage_title(title: str) -> bool:
+    """Return True for Wikivoyage article titles that are clearly NOT a place
+    description (disambiguation, phrasebook, non-travel list pages, etc.).
+
+    Guards against the noisy results seen in practice: searching for a cafe
+    name can return articles about songs, films, bands or phrasebook lines.
+    """
+    lowered = title.lower()
+    reject_markers = (
+        "разговорник",  # phrasebook lines
+        "культурное наследие",  # heritage listings, not a place impression
+        "род. ",  # disambiguation with people
+        "значения",  # "X (значения)" disambiguation
+    )
+    # Markers of non-place articles (songs, bands, films, people) that
+    # frequently appear as false positives when a POI name collides with them.
+    non_place_markers = (
+        " группа",
+        "-группа",
+        "песн",
+        "фильм",
+        "альбом",
+        "писатель",
+        "поэт",
+        "композитор",
+        "актёр",
+        "актер",
+        "певиц",
+        "режиссёр",
+        "режиссер",
+        "телесериал",
+        "расцветки",
+    )
+    return any(marker in lowered for marker in reject_markers) or any(
+        marker in lowered for marker in non_place_markers
+    )
+
+
+def _fetch_reviews(
+    names: list[str], max_concurrent: int = 5, category: str = ""
+) -> dict[str, str]:
+    """Fetch impression-like texts for places from Wikivoyage.
+
+    Wikivoyage is an open travel guide. Strategy:
+      1. Direct article lookup by exact/fuzzy name.
+      2. For cultural/heritage categories a nested district page like
+         "Москва/Кусково" is accepted **only if** the POI name itself appears
+         in the article title (proves the article is about OUR place, not just
+         a passing mention in a larger district page).
+
+    This is deliberately conservative: we prefer a small number of CORRECT
+    impressions over a large number of wrong ones (songs, bands, films).
+
+    Args:
+        names: place names to look up.
+        max_concurrent: number of article titles per API call.
+        category: POI category of the queried places (used to relax the
+            district-page rule for cultural venues).
+
+    Returns:
+        A dict mapping the original name -> short text (may be empty).
+    """
+    # District pages ("Москва/...") are only trusted for cultural/heritage
+    # places. Commercial categories (cinemas, bars, restaurants, cafes) get
+    # synthetic reviews instead: direct article lookups here collide too often
+    # with unrelated toponyms (e.g. "Свобода" matches a village in Kursk).
+    cultural_categories = {"museum", "art_gallery", "park", "hotel"}
+    reviews: dict[str, str] = {}
+    if category and category not in cultural_categories:
+        # For commercial venues we never trust Wikivoyage lookups: short
+        # generic names (Свобода, Берёзка, ...) collide with non-place pages,
+        # and there are no real per-venue travel texts anyway. Synthetic
+        # reviews are filled by the caller
+        return reviews
+    dedup_names = sorted({n for n in names if n})
+    for start in range(0, len(dedup_names), max_concurrent):
+        batch = dedup_names[start : start + max_concurrent]
+        try:
+            response = requests.get(
+                WIKIVOYAGE_API_URL,
+                params={
+                    "action": "query",
+                    "format": "json",
+                    "prop": "extracts",
+                    "explaintext": 1,
+                    "exintro": 1,
+                    "redirects": 1,
+                    "titles": "|".join(batch),
+                },
+                timeout=HTTP_TIMEOUT_SECONDS,
+                headers={"User-Agent": USER_AGENT},
+            )
+            if response.status_code != 200:
+                continue
+            pages = response.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                title = page.get("title") or ""
+                extract = (page.get("extract") or "").strip()
+                if not title or not extract or _is_rejectable_wikivoyage_title(title):
+                    continue
+                for name in batch:
+                    name_l = name.lower()
+                    title_l = title.lower()
+                    # Strict containment (case-insensitive) to avoid capturing
+                    # unrelated pages (e.g. "Breakfast Club" the band).
+                    direct_match = name_l in title_l or title_l in name_l
+                    # District articles are trusted only for cultural places
+                    # AND only when the exact place name appears in the title;
+                    # otherwise we'd pull unrelated toponyms from other regions.
+                    district_match = (
+                        category in cultural_categories
+                        and "москва/" in title_l
+                        and name_l in title_l
+                    )
+                    if direct_match or district_match:
+                        reviews.setdefault(name, extract[:500])
+                        break
+        except requests.RequestException:
+            continue
+        time.sleep(0.3)
+    return reviews
+
+
 def save_records(records: list[dict[str, Any]], settings: Settings) -> pd.DataFrame:
     """Persist collected records to CSV and return them as a DataFrame.
 
     Descriptions are enriched from Wikipedia when available (short intro),
-    falling back to a category-based placeholder.
+    falling back to a category-based placeholder. The `reviews` column is
+    filled from Wikivoyage impression-like texts when an article matches.
 
     Args:
         records: normalized list of POI records.
@@ -608,6 +870,20 @@ def save_records(records: list[dict[str, Any]], settings: Settings) -> pd.DataFr
     names = sorted({r["name"] for r in records})
     wiki_descriptions = _fetch_wikipedia_descriptions(names)
 
+    # Populate the `reviews` column with a clearly-marked provenance:
+    #   1. Wikivoyage article matched to the place (real travel text);
+    #   2. synthetic category-level impression for commercial venues, marked
+    #      as `category` so nobody mistakes it for a user review.
+    # Wikivoyage lookup is split by category so cultural places (museums,
+    # galleries, parks) may use district articles, while commercial venues do
+    # not (they have no articles anyway).
+    name_to_category = {r["name"]: r["category"] for r in records}
+    wiki_reviews: dict[str, str] = {}
+    for cat in sorted({name_to_category[n] for n in names}):
+        cat_names = [n for n in names if name_to_category[n] == cat]
+        cat_reviews = _fetch_reviews(cat_names, category=cat)
+        wiki_reviews.update(cat_reviews)
+
     enriched: list[dict[str, Any]] = []
     for record in records:
         record = dict(record)
@@ -615,8 +891,20 @@ def save_records(records: list[dict[str, Any]], settings: Settings) -> pd.DataFr
             record["description"] = wiki_descriptions.get(
                 record["name"], _category_placeholder(record["category"])
             )
+        review_text = wiki_reviews.get(record["name"], "")
+        if review_text:
+            record["reviews"] = review_text[:500]
+            record["review_source"] = REVIEW_SOURCE_WIKIVOYAGE
+        else:
+            # Public key-less APIs expose no real user reviews for these
+            # places; we fill the column with a clearly-marked synthetic
+            # impression so it stays informative without being dishonest.
+            record["reviews"] = _category_review_placeholder(record["category"], record["name"])
+            record["review_source"] = REVIEW_SOURCE_CATEGORY
         enriched.append(record)
 
+    # RAW_COLUMNS already includes `review_source` (see its definition);
+    # passing it again would duplicate the column.
     df = pd.DataFrame(enriched, columns=RAW_COLUMNS)
     out_path = settings.data_dir / "poi_dataset_raw.csv"
     df.to_csv(out_path, index=False, encoding="utf-8-sig")
@@ -636,6 +924,68 @@ def _category_placeholder(category: str) -> str:
         "hotel": "Гостиница с комфортными номерами для туристов и командировок.",
     }
     return placeholders.get(category, "")
+
+
+def _category_review_placeholder(category: str, name: str) -> str:
+    """Return a clearly-marked synthesized impression for a POI.
+
+    Public key-less APIs do NOT expose user reviews for individual commercial
+    venues (restaurants, bars, cafes, cinemas). Instead of leaving the column
+    empty or fabricating fake ratings, we produce an honest "category-level"
+    impression and mark its provenance as `category` (synthetic).
+
+    Args:
+        category: POI category key.
+        name: the place name (used to make the text feel specific but honest).
+
+    Returns:
+        A short impression-like text.
+    """
+    templates = {
+        "cafe": (
+            "Одно из городских кофеен, где можно не спеша выпить кофе, "
+            "поработать за ноутбуком или встретиться с друзьями. "
+            "Атмосфера зависит от времени суток: днём уютно и спокойно, "
+            "вечером — оживлённее."
+        ),
+        "restaurant": (
+            "Ресторан с полноценным меню — от завтраков до ужина. "
+            "Подходит для обеда в будни и для ужина в выходной, "
+            "в том числе в компании или по особому поводу."
+        ),
+        "bar": (
+            "Бар, куда приходят вечером после рабочего дня: разливное пиво, "
+            "коктейли и непринуждённая живая атмосфера. "
+            "Хорош для встречи с друзьями."
+        ),
+        "cinema": (
+            "Городской кинотеатр с актуальным репертуаром. "
+            "Подходит для вечернего сеанса — как в одиночку, так и в компании."
+        ),
+        "museum": (
+            "Музей с постоянной экспозицией и временными выставками. "
+            "Хорошо подходит для культурного выходного дня: спокойная "
+            "атмосфера, осмотр займёт от часа до нескольких часов."
+        ),
+        "art_gallery": (
+            "Галерея, где представлены произведения современного и "
+            "классического искусства. Удобное место для неспешного просмотра "
+            "выставок и знакомства с новыми художниками."
+        ),
+        "park": (
+            "Городской парк с аллеями, зелёными зонами и местами для отдыха. "
+            "Подходит для прогулки, пробежки или отдыха на свежем воздухе."
+        ),
+        "hotel": (
+            "Гостиница с комфортными номерами для туристов и деловых "
+            "поездок. Расположение и уровень сервиса делают её удобной "
+            "базой для знакомства с городом."
+        ),
+    }
+    text = templates.get(category)
+    if not text:
+        return ""
+    return text
 
 
 def collect_dataset(settings: Settings | None = None) -> pd.DataFrame:
@@ -678,6 +1028,10 @@ def collect_dataset(settings: Settings | None = None) -> pd.DataFrame:
             + "; ".join(errors)
             + ". Check the bounding box or enable OFFLINE_MODE."
         )
+
+    # Final safety net: cap each category to the per-category limit regardless
+    # of the source (a single source may return more than the cap).
+    records = _cap_records_per_category(records, settings.osm_pois_per_category)
 
     df = save_records(records, settings)
     _log_collection_summary(df, settings)

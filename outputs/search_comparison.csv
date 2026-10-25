@@ -1,51 +1,51 @@
-query,method,rank,name
-уютное кафе для работы,tfidf,1,CofeFest
-уютное кафе для работы,tfidf,2,Gagawa
-уютное кафе для работы,tfidf,3,Дринкит
-уютное кафе для работы,tfidf,4,Pho City
-уютное кафе для работы,tfidf,5,Com 1989
-уютное кафе для работы,keyword,1,Галерея искусства стран Европы и Америки XIX—XX веков
-уютное кафе для работы,keyword,2,Breakfast Club
-уютное кафе для работы,keyword,3,CofeFest
-уютное кафе для работы,keyword,4,Pho City
-уютное кафе для работы,keyword,5,Gagawa
-место для семейного обеда,tfidf,1,Chakrul
-место для семейного обеда,tfidf,2,Saviv
-место для семейного обеда,tfidf,3,Bolshoi
-место для семейного обеда,tfidf,4,Eshak
-место для семейного обеда,tfidf,5,Рыба моя
-место для семейного обеда,keyword,1,Eshak
-место для семейного обеда,keyword,2,Hands asian
-место для семейного обеда,keyword,3,Star Grill
-место для семейного обеда,keyword,4,Кафетерий № 1
-место для семейного обеда,keyword,5,Рыба моя
-романтический ресторан на вечер,tfidf,1,Saviv
-романтический ресторан на вечер,tfidf,2,Chakrul
-романтический ресторан на вечер,tfidf,3,Bolshoi
-романтический ресторан на вечер,tfidf,4,Eshak
-романтический ресторан на вечер,tfidf,5,На вина!
-романтический ресторан на вечер,keyword,1,Eshak
-романтический ресторан на вечер,keyword,2,Hands asian
-романтический ресторан на вечер,keyword,3,Star Grill
-романтический ресторан на вечер,keyword,4,Кафетерий № 1
-романтический ресторан на вечер,keyword,5,Рыба моя
-музей для культурного дня,tfidf,1,Исторический музей
-музей для культурного дня,tfidf,2,Музей-заповедник Кусково
-музей для культурного дня,tfidf,3,Государственный музей А.С.Пушкина
-музей для культурного дня,tfidf,4,"Историко-мемориальный музей ""Пресня"""
-музей для культурного дня,tfidf,5,Государственный музей Л. Н. Толстого
-музей для культурного дня,keyword,1,Еврейский музей и центр толерантности
-музей для культурного дня,keyword,2,Государственный музей А.С.Пушкина
-музей для культурного дня,keyword,3,"Историко-мемориальный музей ""Пресня"""
-музей для культурного дня,keyword,4,Музей-заповедник Кусково
-музей для культурного дня,keyword,5,"Музейно – производственный комплекс ""Паровозное депо"" на станции ""Подмосковная"""
-парк для прогулки на выходных,tfidf,1,Парк Школьников
-парк для прогулки на выходных,tfidf,2,Школьный парк
-парк для прогулки на выходных,tfidf,3,парк Никулино
-парк для прогулки на выходных,tfidf,4,"Парк ""Торфянка"""
-парк для прогулки на выходных,tfidf,5,Park
-парк для прогулки на выходных,keyword,1,"Парк ""Торфянка"""
-парк для прогулки на выходных,keyword,2,Новый долинный парк
-парк для прогулки на выходных,keyword,3,парк Никулино
-парк для прогулки на выходных,keyword,4,Школьный парк
-парк для прогулки на выходных,keyword,5,Парк Олимпийской деревни
+﻿rank,name,category,atmosphere,experience_type,visit_context,budget,visit_time,query,method
+1,Cinnabon,cafe,cozy,food,friends,low,morning,уютное кафе для работы,tfidf
+2,Cinnabon,cafe,cozy,food,friends,low,morning,уютное кафе для работы,tfidf
+3,Flip,cafe,cozy,food,friends,low,morning,уютное кафе для работы,tfidf
+4,Make coffee,cafe,cozy,food,friends,low,morning,уютное кафе для работы,tfidf
+5,Эль & Стаут,cafe,cozy,food,friends,low,morning,уютное кафе для работы,tfidf
+1,Make coffee,cafe,cozy,food,friends,low,morning,уютное кафе для работы,keyword
+2,Max Bakery,cafe,cozy,food,friends,low,morning,уютное кафе для работы,keyword
+3,Do.Bro Coffee,cafe,cozy,food,friends,low,morning,уютное кафе для работы,keyword
+4,Cinnabon,cafe,cozy,food,friends,low,morning,уютное кафе для работы,keyword
+5,Кулинарная лавка братьев Караваевых,cafe,cozy,food,friends,low,morning,уютное кафе для работы,keyword
+1,"Семейный ресторан ""Нани""",restaurant,family,food,family,medium,morning,место для семейного обеда,tfidf
+2,Svet,restaurant,neutral,food,general,medium,morning,место для семейного обеда,tfidf
+3,Catch,restaurant,neutral,food,general,medium,morning,место для семейного обеда,tfidf
+4,Lui,restaurant,neutral,food,general,medium,morning,место для семейного обеда,tfidf
+5,Argomento,restaurant,neutral,food,general,medium,morning,место для семейного обеда,tfidf
+1,"Семейный ресторан ""Нани""",restaurant,family,food,family,medium,morning,место для семейного обеда,keyword
+2,Svet,restaurant,neutral,food,general,medium,morning,место для семейного обеда,keyword
+3,TownHouse,restaurant,neutral,food,general,medium,morning,место для семейного обеда,keyword
+4,Sivarus,restaurant,neutral,food,general,medium,morning,место для семейного обеда,keyword
+5,Christian,restaurant,neutral,food,general,medium,morning,место для семейного обеда,keyword
+1,"Семейный ресторан ""Нани""",restaurant,family,food,family,medium,morning,романтический ресторан на вечер,tfidf
+2,TownHouse,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,tfidf
+3,Svet,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,tfidf
+4,Sivarus,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,tfidf
+5,Christian,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,tfidf
+1,Svet,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,keyword
+2,TownHouse,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,keyword
+3,Sivarus,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,keyword
+4,Christian,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,keyword
+5,Argomento,restaurant,neutral,food,general,medium,morning,романтический ресторан на вечер,keyword
+1,Исторический музей,museum,quiet,culture,general,medium,day,музей для культурного дня,tfidf
+2,Музей автомобильных историй,museum,quiet,culture,family,medium,day,музей для культурного дня,tfidf
+3,Государственный музей Л.Н. Толстого,museum,quiet,culture,family,medium,day,музей для культурного дня,tfidf
+4,Музей Г.О.Р.А.,museum,quiet,culture,family,medium,day,музей для культурного дня,tfidf
+5,Музей-усадьба Л. Н. Толстого в Хамовниках,museum,quiet,culture,family,medium,day,музей для культурного дня,tfidf
+1,Государственный музей Л.Н. Толстого,museum,quiet,culture,family,medium,day,музей для культурного дня,keyword
+2,Всероссийский музей декоративно-прикладного и народного искусства,museum,quiet,culture,family,medium,day,музей для культурного дня,keyword
+3,Музей археологии Москвы,museum,quiet,culture,general,medium,day,музей для культурного дня,keyword
+4,Грановитая палата,museum,quiet,culture,general,medium,day,музей для культурного дня,keyword
+5,Потешный дворец,museum,quiet,culture,general,medium,day,музей для культурного дня,keyword
+1,Парк Школьников,park,neutral,walk,general,low,day,парк для прогулки на выходных,tfidf
+2,Парк на Северодвинской,park,neutral,walk,general,low,day,парк для прогулки на выходных,tfidf
+3,"Экологический парк ""Лихоборка""",park,neutral,walk,general,low,day,парк для прогулки на выходных,tfidf
+4,Новый долинный парк,park,neutral,walk,general,low,day,парк для прогулки на выходных,tfidf
+5,5-й квартал Бирюлёвского лесопарка,park,neutral,walk,general,low,day,парк для прогулки на выходных,tfidf
+1,Бирюлёвский лесопарк,park,neutral,walk,general,low,day,парк для прогулки на выходных,keyword
+2,Парк Школьников,park,neutral,walk,general,low,day,парк для прогулки на выходных,keyword
+3,Борисовские пруды,park,neutral,walk,general,low,day,парк для прогулки на выходных,keyword
+4,Новый долинный парк,park,neutral,walk,general,low,day,парк для прогулки на выходных,keyword
+5,5-й квартал Бирюлёвского лесопарка,park,neutral,walk,general,low,day,парк для прогулки на выходных,keyword
